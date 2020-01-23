@@ -1,9 +1,9 @@
 const express = require('express');
 const db = require('./userDb.js');
-const postDB = require('../posts/postDb.js')
+const postDB = require('../posts/postDb.js');
 const router = express.Router();
 
-router.post('/', (req, res) => {
+router.post('/', validateUser, (req, res) => {
   // do your magic!
   const newUser = req.body;
   if (newUser.name) {
@@ -21,8 +21,37 @@ router.post('/', (req, res) => {
   }
 });
 
-router.post('/:id/posts', (req, res) => {
+router.post('/:id/posts', validateUserId, validatePost, (req, res) => {
   // do your magic!//**************************************************************************************** */
+  const id = req.params.id;
+  const newPost = req.body;
+  newPost.user_id = id;
+
+  db.getById(id)
+    .then(user => {
+      if (user) {
+        if (newPost.text && newPost.user_id) {
+          postDB
+            .insert(newPost)
+            .then(addedPost => {
+              res.status(201).json({
+                added: addedPost,
+                message: `added new post to database for ${user.name} `
+              });
+            })
+            .catch(err => {
+              res.status(500).json({ errorMessage: 'post could not be added' });
+            });
+        } else {
+          res.status(404).json({ message: 'Please provide text for the post' });
+        }
+      } else {
+        res.status(404).json({ message: 'User does not exist' });
+      }
+    })
+    .catch(err => {
+      res.status(500).json({ errorMessage: 'could not post to database' });
+    });
 });
 
 router.get('/', (req, res) => {
@@ -38,7 +67,7 @@ router.get('/', (req, res) => {
     });
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', validateUserId, (req, res) => {
   // do your magic!
   const id = req.params.id;
   db.getById(id)
@@ -58,7 +87,7 @@ router.get('/:id', (req, res) => {
     });
 });
 
-router.get('/:id/posts', (req, res) => {
+router.get('/:id/posts', validateUserId, (req, res) => {
   // do your magic!
   const userId = req.params.id;
   db.getUserPosts(userId)
@@ -78,7 +107,7 @@ router.get('/:id/posts', (req, res) => {
     });
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', validateUserId, (req, res) => {
   // do your magic!
   const id = req.params.id;
 
@@ -106,42 +135,82 @@ router.delete('/:id', (req, res) => {
     });
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', validateUserId, (req, res) => {
   // do your magic!
   const id = req.params.id;
   const contents = req.body;
-  db.getById(id).then(user=>{
-    if(user){
-      if(contents.name){
-        db.update(id, contents).then(updatedUser=>{
-          res.status(201).json(updatedUser)
-        }).catch(err=>{
-          res.status(500).json({errorMessage: "user could not be updated"})
-        })
-      }else{
-        res.status(400).json({message: "must have a name property"})
+  db.getById(id)
+    .then(user => {
+      if (user) {
+        if (contents.name) {
+          db.update(id, contents)
+            .then(updatedUser => {
+              res.status(201).json(updatedUser);
+            })
+            .catch(err => {
+              res
+                .status(500)
+                .json({ errorMessage: 'user could not be updated' });
+            });
+        } else {
+          res.status(400).json({ message: 'must have a name property' });
+        }
+      } else {
+        res.status(404).json({ message: 'user does not exist' });
       }
-
-    }else{
-      res.status(404).json({message: "user does not exist"})
-    }
-  }).catch(err=>{
-    res.status(500).json({errorMessage: 'Could not update user'})
-  })
+    })
+    .catch(err => {
+      res.status(500).json({ errorMessage: 'Could not update user' });
+    });
 });
 
 //custom middleware
 
 function validateUserId(req, res, next) {
   // do your magic!
+  const theUser = req.params.id;
+  db.getById(theUser)
+    .then(user => {
+      if (user) {
+        req.user = user;
+        next();
+      } else {
+        res.status(400).json({ message: 'invalide user id, from middleware' });
+      }
+    })
+    .catch(err => {
+      res.status(500).json({ errorMessage: 'error' });
+    });
 }
 
 function validateUser(req, res, next) {
   // do your magic!
+  const user = req.body;
+
+  if (!user) {
+    res.status(400).json({ message: 'missing user data, from middleware' });
+  } else if (!user.name) {
+    res
+      .status(400)
+      .json({ message: 'missing required name field, from middleware' });
+  } else {
+    next();
+  }
 }
 
 function validatePost(req, res, next) {
   // do your magic!
+  const post = req.body;
+
+  if (!post) {
+    res.status(400).json({ message: 'missing post data' });
+  } else if (!post.text) {
+    res
+      .status(400)
+      .json({ message: 'missing required text field, from middleware' });
+  } else {
+    next();
+  }
 }
 
 module.exports = router;
