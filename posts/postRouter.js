@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('./postDb.js');
 
 const router = express.Router();
-router.use(validatePostId);
+//router.use(validatePostId);
 router.get('/', (req, res) => {
   // do your magic!
   db.get()
